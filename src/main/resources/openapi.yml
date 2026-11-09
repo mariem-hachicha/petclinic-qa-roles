@@ -1,7 +1,7 @@
 openapi: 3.0.1
 info:
   title: Spring PetClinic
-  description: Spring PetClinic Sample Application.
+  description: "Spring PetClinic Sample Application.\nAuthentication: call POST /auth/login with a username and password to obtain a JWT, then send it in the header 'Authorization: Bearer <token>'. Roles: ADMIN, RECEPTIONIST, VET, OWNER (see 'Allowed roles' in each operation)."
   license:
     name: Apache 2.0
     url: https://www.apache.org/licenses/LICENSE-2.0
@@ -9,6 +9,8 @@ info:
 servers:
   - url: http://localhost:9966/petclinic/api
 tags:
+  - name: auth
+    description: Authentication (JWT).
   - name: oops
     description: Endpoint which always returns an error.
   - name: owners
@@ -29,14 +31,50 @@ tags:
     description: Endpoints related to pet types.
   - name: specialties
     description: Endpoints related to vet specialties.
+security:
+  - bearerAuth: []
 paths:
+  /auth/login:
+    post:
+      tags:
+        - auth
+      operationId: login
+      summary: Log in and obtain a JWT
+      description: Exchanges a username and a password for a signed JWT valid for 60 minutes. No authentication required.
+      security: []
+      requestBody:
+        description: The credentials
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
+      responses:
+        200:
+          description: Authentication successful, token returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        400:
+          description: Bad request (empty or missing field).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        401:
+          description: Invalid username or password, or disabled account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
   /oops:
     get:
       tags:
         - oops
       operationId: failingRequest
       summary: Always fails
-      description: Produces sample error response.
+      description: Produces sample error response. Requires authentication.
       responses:
         200:
           description: Never returned.
@@ -62,13 +100,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
   /owners:
     post:
       tags:
         - owners
       operationId: addOwner
       summary: Adds a pet owner
-      description: Records the details of a new pet owner.
+      description: 'Records the details of a new pet owner. Allowed roles: ADMIN, RECEPTIONIST.'
       requestBody:
         description: The pet owner
         content:
@@ -95,12 +135,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
     get:
       tags:
         - owners
       operationId: listOwners
       summary: Lists pet owners
-      description: Returns an array of pet owners.
+      description: 'Returns an array of pet owners. Allowed roles: ADMIN, RECEPTIONIST, VET.'
       parameters:
         - name: lastName
           in: query
@@ -136,13 +180,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
   /v2/owners:
     get:
       tags:
         - owner-v2
       operationId: listOwnersPage
       summary: Lists pet owners with pagination
-      description: Returns a page of pet owners.
+      description: 'Returns a page of pet owners. Allowed roles: ADMIN, RECEPTIONIST, VET.'
       parameters:
         - name: lastName
           in: query
@@ -203,13 +251,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
   /owners/{ownerId}:
     get:
       tags:
         - owners
       operationId: getOwner
       summary: Get a pet owner by ID
-      description: Returns the pet owner or a 404 error.
+      description: 'Returns the pet owner or a 404 error. Allowed roles: ADMIN, RECEPTIONIST, VET ; OWNER (client) : only his own data, otherwise 403.'
       parameters:
         - name: ownerId
           in: path
@@ -257,12 +309,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
     put:
       tags:
         - owners
       operationId: updateOwner
       summary: Update a pet owner's details
-      description: Updates the pet owner record with the specified details.
+      description: 'Updates the pet owner record with the specified details. Allowed roles: ADMIN, RECEPTIONIST.'
       parameters:
         - name: ownerId
           in: path
@@ -306,12 +362,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
 
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
     delete:
       tags:
         - owners
       operationId: deleteOwner
       summary: Delete an owner by ID
-      description: Returns the owner or a 404 error.
+      description: 'Returns the owner or a 404 error. Allowed roles: ADMIN, RECEPTIONIST.'
       parameters:
         - name: ownerId
           in: path
@@ -359,13 +419,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
   /owners/{ownerId}/pets:
     post:
       tags:
         - owners
       operationId: addPetToOwner
       summary: Adds a pet to an owner
-      description: Records the details of a new pet.
+      description: 'Records the details of a new pet. Allowed roles: ADMIN, RECEPTIONIST.'
       parameters:
         - name: ownerId
           in: path
@@ -408,13 +472,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
   /owners/{ownerId}/pets/{petId}:
     get:
       tags:
         - owners
       operationId: getOwnersPet
       summary: Get a pet by ID
-      description: Returns the pet or a 404 error.
+      description: 'Returns the pet or a 404 error. Allowed roles: ADMIN, RECEPTIONIST, VET ; OWNER (client) : only his own data, otherwise 403.'
       parameters:
         - name: ownerId
           in: path
@@ -471,13 +539,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
     put:
       tags:
         - owners
       operationId: updateOwnersPet
 
       summary: Update a pet's details
-      description: Updates the pet record with the specified details.
+      description: 'Updates the pet record with the specified details. Allowed roles: ADMIN, RECEPTIONIST.'
       parameters:
         - name: ownerId
           in: path
@@ -525,13 +597,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
   /owners/{ownerId}/pets/{petId}/visits:
     post:
       tags:
         - owners
       operationId: addVisitToOwner
       summary: Adds a vet visit
-      description: Records the details of a new vet visit.
+      description: 'Records the details of a new vet visit. Allowed roles: ADMIN, RECEPTIONIST, VET.'
       parameters:
         - name: ownerId
           in: path
@@ -583,13 +659,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
   /pettypes:
     get:
       tags:
         - pettypes
       operationId: listPetTypes
       summary: Lists pet types
-      description: Returns an array of pet types.
+      description: 'Returns an array of pet types. Allowed roles: ADMIN, RECEPTIONIST, VET.'
       responses:
         200:
           description: Pet types found and returned.
@@ -617,12 +697,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
     post:
       tags:
         - pettypes
       operationId: addPetType
       summary: Create a pet type
-      description: Creates a pet type .
+      description: 'Creates a pet type . Allowed roles: ADMIN.'
       requestBody:
         description: The pet type
         content:
@@ -667,13 +751,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
   /pettypes/{petTypeId}:
     get:
       tags:
         - pettypes
       operationId: getPetType
       summary: Get a pet type by ID
-      description: Returns the pet type or a 404 error.
+      description: 'Returns the pet type or a 404 error. Allowed roles: ADMIN, RECEPTIONIST, VET.'
       parameters:
         - name: petTypeId
           in: path
@@ -721,12 +809,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
     put:
       tags:
         - pettypes
       operationId: updatePetType
       summary: Update a pet type by ID
-      description: Returns the pet type or a 404 error.
+      description: 'Returns the pet type or a 404 error. Allowed roles: ADMIN.'
       parameters:
         - name: petTypeId
           in: path
@@ -781,12 +873,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
     delete:
       tags:
         - pettypes
       operationId: deletePetType
       summary: Delete a pet type by ID
-      description: Returns the pet type or a 404 error.
+      description: 'Returns the pet type or a 404 error. Allowed roles: ADMIN.'
       parameters:
         - name: petTypeId
           in: path
@@ -835,13 +931,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
 
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
   /pets:
     get:
       tags:
         - pets
       operationId: listPets
       summary: Lists pet
-      description: Returns an array of pet .
+      description: 'Returns an array of pet . Allowed roles: ADMIN, RECEPTIONIST, VET.'
       responses:
         200:
           description: Pet types found and returned.
@@ -869,13 +969,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
   /v2/pets:
     get:
       tags:
         - pet-v2
       operationId: listPetsPage
       summary: Lists pets with pagination.
-      description: Returns a page of pets.
+      description: 'Returns a page of pets. Allowed roles: ADMIN, RECEPTIONIST, VET.'
       parameters:
         - name: page
           in: query
@@ -923,13 +1027,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
 
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
   /pets/{petId}:
     get:
       tags:
         - pets
       operationId: getPet
       summary: Get a pet by ID
-      description: Returns the pet  or a 404 error.
+      description: 'Returns the pet  or a 404 error. Allowed roles: ADMIN, RECEPTIONIST, VET ; OWNER (client) : only his own data, otherwise 403.'
       parameters:
         - name: petId
           in: path
@@ -977,12 +1085,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
     put:
       tags:
         - pets
       operationId: updatePet
       summary: Update a pet by ID
-      description: Returns the pet or a 404 error.
+      description: 'Returns the pet or a 404 error. Allowed roles: ADMIN, RECEPTIONIST.'
       parameters:
         - name: petId
           in: path
@@ -1037,12 +1149,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
     delete:
       tags:
         - pets
       operationId: deletePet
       summary: Delete a pet by ID
-      description: Returns the pet or a 404 error.
+      description: 'Returns the pet or a 404 error. Allowed roles: ADMIN, RECEPTIONIST.'
       parameters:
         - name: petId
           in: path
@@ -1090,13 +1206,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
   /visits:
     get:
       tags:
         - visits
       operationId: listVisits
       summary: Lists visits
-      description: Returns an array of visit .
+      description: 'Returns an array of visit . Allowed roles: ADMIN, RECEPTIONIST, VET.'
       responses:
         200:
           description: visits found and returned.
@@ -1124,12 +1244,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
     post:
       tags:
         - visits
       operationId: addVisit
       summary: Create a visit
-      description: Creates a visit.
+      description: 'Creates a visit. Allowed roles: ADMIN, RECEPTIONIST, VET.'
       requestBody:
         description: The visit
         content:
@@ -1174,13 +1298,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
   /visits/{visitId}:
     get:
       tags:
         - visits
       operationId: getVisit
       summary: Get a visit by ID
-      description: Returns the visit or a 404 error.
+      description: 'Returns the visit or a 404 error. Allowed roles: ADMIN, RECEPTIONIST, VET ; OWNER (client) : only his own data, otherwise 403.'
       parameters:
         - name: visitId
           in: path
@@ -1228,12 +1356,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
     put:
       tags:
         - visits
       operationId: updateVisit
       summary: Update a visit by ID
-      description: Returns the visit or a 404 error.
+      description: 'Returns the visit or a 404 error. Allowed roles: ADMIN, RECEPTIONIST, VET.'
       parameters:
         - name: visitId
           in: path
@@ -1288,12 +1420,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
     delete:
       tags:
         - visits
       operationId: deleteVisit
       summary: Delete a visit by ID
-      description: Returns the visit or a 404 error.
+      description: 'Returns the visit or a 404 error. Allowed roles: ADMIN, RECEPTIONIST.'
       parameters:
         - name: visitId
           in: path
@@ -1341,13 +1477,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
   /specialties:
     get:
       tags:
         - specialties
       operationId: listSpecialties
       summary: Lists specialties
-      description: Returns an array of specialty .
+      description: 'Returns an array of specialty . Allowed roles: ADMIN, RECEPTIONIST, VET.'
       responses:
         200:
           description: Specialties found and returned.
@@ -1375,12 +1515,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
     post:
       tags:
         - specialties
       operationId: addSpecialty
       summary: Create a specialty
-      description: Creates a specialty .
+      description: 'Creates a specialty . Allowed roles: ADMIN.'
       requestBody:
         description: The specialty
         content:
@@ -1425,13 +1569,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
   /specialties/{specialtyId}:
     get:
       tags:
         - specialties
       operationId: getSpecialty
       summary: Get a specialty by ID
-      description: Returns the specialty or a 404 error.
+      description: 'Returns the specialty or a 404 error. Allowed roles: ADMIN, RECEPTIONIST, VET.'
       parameters:
         - name: specialtyId
           in: path
@@ -1479,12 +1627,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
     put:
       tags:
         - specialties
       operationId: updateSpecialty
       summary: Update a specialty by ID
-      description: Returns the specialty or a 404 error.
+      description: 'Returns the specialty or a 404 error. Allowed roles: ADMIN.'
       parameters:
         - name: specialtyId
           in: path
@@ -1539,12 +1691,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
     delete:
       tags:
         - specialties
       operationId: deleteSpecialty
       summary: Delete a specialty by ID
-      description: Returns the specialty or a 404 error.
+      description: 'Returns the specialty or a 404 error. Allowed roles: ADMIN.'
       parameters:
         - name: specialtyId
           in: path
@@ -1592,13 +1748,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
   /vets:
     get:
       tags:
         - vets
       operationId: listVets
       summary: Lists vets
-      description: Returns an array of vets.
+      description: 'Returns an array of vets. Allowed roles: ADMIN, RECEPTIONIST, VET.'
       responses:
         200:
           description: Vets found and returned.
@@ -1627,12 +1787,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
 
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
     post:
       tags:
         - vets
       operationId: addVet
       summary: Create a Vet
-      description: Creates a vet .
+      description: 'Creates a vet . Allowed roles: ADMIN.'
       requestBody:
         description: The vet
         content:
@@ -1677,13 +1841,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
   /vets/{vetId}:
     get:
       tags:
         - vets
       operationId: getVet
       summary: Get a vet by ID
-      description: Returns the vet or a 404 error.
+      description: 'Returns the vet or a 404 error. Allowed roles: ADMIN, RECEPTIONIST, VET.'
       parameters:
         - name: vetId
           in: path
@@ -1731,12 +1899,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
     put:
       tags:
         - vets
       operationId: updateVet
       summary: Update a vet  by ID
-      description: Returns the vet or a 404 error.
+      description: 'Returns the vet or a 404 error. Allowed roles: ADMIN.'
       parameters:
         - name: vetId
           in: path
@@ -1791,12 +1963,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
     delete:
       tags:
         - vets
       operationId: deleteVet
       summary: Delete a vet by ID
-      description: Returns the vet or a 404 error.
+      description: 'Returns the vet or a 404 error. Allowed roles: ADMIN.'
       parameters:
         - name: vetId
           in: path
@@ -1844,13 +2020,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
   /users:
     post:
       tags:
         - users
       operationId: addUser
       summary: Create a user
-      description: Creates a user.
+      description: 'Creates a user. Allowed roles: ADMIN.'
       requestBody:
         description: The user
         content:
@@ -1895,7 +2075,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    Unauthorized:
+      description: Missing, malformed, expired or invalid JWT. Empty body.
+      headers:
+        WWW-Authenticate:
+          description: Bearer authentication challenge.
+          schema:
+            type: string
+    Forbidden:
+      description: Valid JWT but the role is not allowed (or an OWNER accessing data of another owner).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
   schemas:
     ProblemDetail:
       title: Problem Detail
@@ -2383,3 +2586,39 @@ components:
           example: admin
       required:
         - name
+    LoginRequest:
+      title: Login request
+      description: Credentials of a user.
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 1
+          example: admin
+        password:
+          type: string
+          minLength: 1
+          example: admin
+      required:
+        - username
+        - password
+    TokenResponse:
+      title: Token response
+      description: A JWT and its metadata.
+      type: object
+      properties:
+        accessToken:
+          type: string
+          description: 'The JWT to send as "Authorization: Bearer <token>".'
+        tokenType:
+          type: string
+          example: Bearer
+        expiresIn:
+          type: integer
+          format: int64
+          description: Validity of the token, in seconds.
+          example: 3600
+      required:
+        - accessToken
+        - tokenType
+        - expiresIn
