@@ -1,0 +1,9 @@
+services:
+  postgres:
+    image: postgres:16.3
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=petclinic
+      - POSTGRES_PASSWORD=petclinic
+      - POSTGRES_DB=petclinic
