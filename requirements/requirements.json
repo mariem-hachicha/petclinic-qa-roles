@@ -1,0 +1,1513 @@
+{
+  "project": "PetClinic REST (Sujet 12 - pipeline QA piloté par IA)",
+  "source_contract": "src/main/resources/openapi.yml",
+  "conventions": {
+    "expected_status": "Code promis par le CONTRAT. Si le code réel diffère, l'écart est décrit dans 'ecart_connu'.",
+    "source.type": "'openapi' = chemin dans le contrat ; 'code' = classe/méthode Java (règle absente du contrat)",
+    "utilisateurs": {
+      "admin": "ROLE_ADMIN",
+      "reception": "ROLE_RECEPTIONIST",
+      "vet": "ROLE_VET",
+      "george": "ROLE_OWNER, propriétaire 1",
+      "betty": "ROLE_OWNER, propriétaire 2"
+    },
+    "mots_de_passe": "identiques au nom d'utilisateur",
+    "authentification": "POST /api/auth/login, puis en-tête 'Authorization: Bearer <accessToken>'",
+    "ecart_connu": "Différence connue entre le contrat et le code réel ; 'À vérifier' = hypothèse non encore confirmée par un test.",
+    "note": "Indication technique pour écrire le test, pas un écart."
+  },
+  "statistics": {
+    "requirements": 90,
+    "operations_covered": 38,
+    "operations_total": 38,
+    "known_discrepancies": 22
+  },
+  "requirements": [
+    {
+      "id": "REQ-AUTH-01",
+      "endpoint": "POST /api/auth/login",
+      "operationId": "login",
+      "category": "fonctionnel",
+      "description": "Un utilisateur existant qui fournit un identifiant et un mot de passe corrects reçoit un jeton JWT, son type ('Bearer') et sa durée de validité en secondes.",
+      "preconditions": [
+        "Aucune authentification requise",
+        "L'utilisateur 'admin' / 'admin' existe (données de démo)"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./auth/login.post.responses.200"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-AUTH-02",
+      "endpoint": "POST /api/auth/login",
+      "operationId": "login",
+      "category": "erreur",
+      "description": "Un mot de passe incorrect est refusé et aucun jeton n'est renvoyé.",
+      "preconditions": [
+        "Aucune authentification requise",
+        "L'utilisateur 'admin' existe"
+      ],
+      "expected_status": 401,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./auth/login.post.responses.401"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-AUTH-03",
+      "endpoint": "POST /api/auth/login",
+      "operationId": "login",
+      "category": "erreur",
+      "description": "Un identifiant inconnu est refusé de la même façon qu'un mauvais mot de passe.",
+      "preconditions": [
+        "Aucune authentification requise"
+      ],
+      "expected_status": 401,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./auth/login.post.responses.401"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-AUTH-04",
+      "endpoint": "POST /api/auth/login",
+      "operationId": "login",
+      "category": "validation",
+      "description": "Une demande de connexion dont le champ 'username' ou 'password' est absent ou vide est refusée.",
+      "preconditions": [
+        "Aucune authentification requise"
+      ],
+      "expected_status": 400,
+      "source": {
+        "type": "openapi",
+        "reference": "components.schemas.LoginRequest.required + properties.*.minLength"
+      },
+      "priority": "moyenne"
+    },
+    {
+      "id": "REQ-SEC-01",
+      "endpoint": "GET /api/owners",
+      "operationId": "listOwners",
+      "category": "sécurité",
+      "description": "Une requête sans en-tête 'Authorization' vers une opération protégée est refusée (règle valable pour toutes les opérations sauf le login).",
+      "preconditions": [
+        "Aucun jeton envoyé"
+      ],
+      "expected_status": 401,
+      "source": {
+        "type": "openapi",
+        "reference": "security (global) + components.responses.Unauthorized"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-SEC-02",
+      "endpoint": "GET /api/owners",
+      "operationId": "listOwners",
+      "category": "sécurité",
+      "description": "Une requête avec un jeton mal formé (ex. 'Bearer abc') est refusée.",
+      "preconditions": [
+        "En-tête 'Authorization: Bearer abc'"
+      ],
+      "expected_status": 401,
+      "source": {
+        "type": "openapi",
+        "reference": "components.responses.Unauthorized"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-SEC-03",
+      "endpoint": "GET /api/owners",
+      "operationId": "listOwners",
+      "category": "sécurité",
+      "description": "Une requête avec un jeton dont le contenu a été modifié (signature invalide) est refusée.",
+      "preconditions": [
+        "Jeton valide d'un utilisateur dont une partie du contenu a été altérée"
+      ],
+      "expected_status": 401,
+      "source": {
+        "type": "openapi",
+        "reference": "components.responses.Unauthorized"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-SEC-04",
+      "endpoint": "GET /api/owners",
+      "operationId": "listOwners",
+      "category": "sécurité",
+      "description": "Une requête avec un jeton expiré est refusée.",
+      "preconditions": [
+        "Jeton dont la date 'exp' est dépassée"
+      ],
+      "expected_status": 401,
+      "source": {
+        "type": "openapi",
+        "reference": "components.responses.Unauthorized"
+      },
+      "priority": "moyenne",
+      "note": "Durée de validité configurée à 60 min (petclinic.jwt.expiration-minutes) : le test doit générer un jeton expiré ou réduire cette durée"
+    },
+    {
+      "id": "REQ-OWN-01",
+      "endpoint": "POST /api/owners",
+      "operationId": "addOwner",
+      "category": "fonctionnel",
+      "description": "La création d'un propriétaire avec des champs valides réussit et renvoie le propriétaire créé, avec un identifiant attribué par le serveur.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 201,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./owners.post.responses.201"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-OWN-02",
+      "endpoint": "POST /api/owners",
+      "operationId": "addOwner",
+      "category": "validation",
+      "description": "La création d'un propriétaire sans le champ obligatoire 'firstName' est refusée.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 400,
+      "source": {
+        "type": "openapi",
+        "reference": "components.schemas.OwnerFields.required (firstName)"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-OWN-03",
+      "endpoint": "POST /api/owners",
+      "operationId": "addOwner",
+      "category": "validation",
+      "description": "La création d'un propriétaire sans le champ obligatoire 'lastName' est refusée.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 400,
+      "source": {
+        "type": "openapi",
+        "reference": "components.schemas.OwnerFields.required (lastName)"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-OWN-04",
+      "endpoint": "POST /api/owners",
+      "operationId": "addOwner",
+      "category": "validation",
+      "description": "La création d'un propriétaire sans le champ obligatoire 'address' est refusée.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 400,
+      "source": {
+        "type": "openapi",
+        "reference": "components.schemas.OwnerFields.required (address)"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-OWN-05",
+      "endpoint": "POST /api/owners",
+      "operationId": "addOwner",
+      "category": "validation",
+      "description": "La création d'un propriétaire sans le champ obligatoire 'city' est refusée.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 400,
+      "source": {
+        "type": "openapi",
+        "reference": "components.schemas.OwnerFields.required (city)"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-OWN-06",
+      "endpoint": "POST /api/owners",
+      "operationId": "addOwner",
+      "category": "validation",
+      "description": "La création d'un propriétaire sans le champ obligatoire 'telephone' est refusée.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 400,
+      "source": {
+        "type": "openapi",
+        "reference": "components.schemas.OwnerFields.required (telephone)"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-OWN-07",
+      "endpoint": "POST /api/owners",
+      "operationId": "addOwner",
+      "category": "validation",
+      "description": "Un téléphone contenant un caractère autre qu'un chiffre (ex. '06-12') est refusé.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 400,
+      "source": {
+        "type": "openapi",
+        "reference": "components.schemas.OwnerFields.properties.telephone.pattern"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-OWN-08",
+      "endpoint": "POST /api/owners",
+      "operationId": "addOwner",
+      "category": "validation",
+      "description": "Un téléphone composé uniquement de chiffres, de longueur comprise entre 1 et 20 (ex. '12345'), est accepté.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 201,
+      "source": {
+        "type": "openapi",
+        "reference": "components.schemas.OwnerFields.properties.telephone (pattern, minLength, maxLength)"
+      },
+      "priority": "haute",
+      "ecart_connu": "L'entité Owner exige exactement 10 chiffres (@Pattern ^[0-9]{10}$) : réponse réelle probablement 500, à vérifier"
+    },
+    {
+      "id": "REQ-OWN-09",
+      "endpoint": "POST /api/owners",
+      "operationId": "addOwner",
+      "category": "validation",
+      "description": "Un téléphone de plus de 20 chiffres est refusé.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 400,
+      "source": {
+        "type": "openapi",
+        "reference": "components.schemas.OwnerFields.properties.telephone.maxLength"
+      },
+      "priority": "moyenne"
+    },
+    {
+      "id": "REQ-OWN-10",
+      "endpoint": "POST /api/owners",
+      "operationId": "addOwner",
+      "category": "validation",
+      "description": "Un prénom contenant un chiffre (ex. 'Jean2') est refusé.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 400,
+      "source": {
+        "type": "openapi",
+        "reference": "components.schemas.OwnerFields.properties.firstName.pattern"
+      },
+      "priority": "moyenne"
+    },
+    {
+      "id": "REQ-OWN-11",
+      "endpoint": "POST /api/owners",
+      "operationId": "addOwner",
+      "category": "validation",
+      "description": "Un prénom composé avec un tiret ou une apostrophe (ex. 'Jean-Pierre') est accepté.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 201,
+      "source": {
+        "type": "openapi",
+        "reference": "components.schemas.OwnerFields.properties.firstName.pattern"
+      },
+      "priority": "moyenne"
+    },
+    {
+      "id": "REQ-OWN-12",
+      "endpoint": "POST /api/owners",
+      "operationId": "addOwner",
+      "category": "validation",
+      "description": "Un prénom de plus de 30 caractères est refusé.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 400,
+      "source": {
+        "type": "openapi",
+        "reference": "components.schemas.OwnerFields.properties.firstName.maxLength"
+      },
+      "priority": "moyenne"
+    },
+    {
+      "id": "REQ-OWN-13",
+      "endpoint": "POST /api/owners",
+      "operationId": "addOwner",
+      "category": "sécurité",
+      "description": "Un vétérinaire n'a pas le droit de créer un propriétaire.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 403,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./owners.post.description (Allowed roles) + responses.403"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-OWN-14",
+      "endpoint": "GET /api/owners",
+      "operationId": "listOwners",
+      "category": "fonctionnel",
+      "description": "La liste des propriétaires est renvoyée.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)",
+        "Les propriétaires de démo existent"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./owners.get.responses.200"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-OWN-15",
+      "endpoint": "GET /api/owners",
+      "operationId": "listOwners",
+      "category": "fonctionnel",
+      "description": "Le filtre 'lastName' ne renvoie que les propriétaires dont le nom correspond (ex. 'Davis' : Betty Davis et Harold Davis).",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./owners.get.parameters.lastName"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-OWN-16",
+      "endpoint": "GET /api/owners",
+      "operationId": "listOwners",
+      "category": "fonctionnel",
+      "description": "Un filtre 'lastName' qui ne correspond à aucun propriétaire renvoie une liste vide.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./owners.get.responses.200 (type: array)"
+      },
+      "priority": "moyenne",
+      "ecart_connu": "Le code renvoie 404 quand la liste est vide (OwnerRestControllerV1.listOwners)"
+    },
+    {
+      "id": "REQ-OWN-17",
+      "endpoint": "GET /api/owners",
+      "operationId": "listOwners",
+      "category": "sécurité",
+      "description": "Un client (OWNER) n'a pas le droit de lister tous les propriétaires.",
+      "preconditions": [
+        "Authentifié en tant que 'george' (ROLE_OWNER)"
+      ],
+      "expected_status": 403,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./owners.get.description (Allowed roles) + responses.403"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-OWN-18",
+      "endpoint": "GET /api/owners/{ownerId}",
+      "operationId": "getOwner",
+      "category": "fonctionnel",
+      "description": "Un propriétaire existant est renvoyé avec ses animaux.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)",
+        "Le propriétaire 1 existe"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./owners/{ownerId}.get.responses.200"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-OWN-19",
+      "endpoint": "GET /api/owners/{ownerId}",
+      "operationId": "getOwner",
+      "category": "erreur",
+      "description": "La lecture d'un propriétaire inexistant (ex. 999) renvoie une erreur 'non trouvé'.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 404,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./owners/{ownerId}.get.responses.404"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-OWN-20",
+      "endpoint": "GET /api/owners/{ownerId}",
+      "operationId": "getOwner",
+      "category": "sécurité",
+      "description": "Un client (OWNER) peut lire sa propre fiche propriétaire.",
+      "preconditions": [
+        "Authentifié en tant que 'george' (ROLE_OWNER), lié au propriétaire 1"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./owners/{ownerId}.get.description (Allowed roles)"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-OWN-21",
+      "endpoint": "GET /api/owners/{ownerId}",
+      "operationId": "getOwner",
+      "category": "sécurité",
+      "description": "Un client (OWNER) ne peut pas lire la fiche d'un autre propriétaire.",
+      "preconditions": [
+        "Authentifié en tant que 'george' (ROLE_OWNER), lié au propriétaire 1",
+        "Lecture du propriétaire 2"
+      ],
+      "expected_status": 403,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./owners/{ownerId}.get.description (Allowed roles) + responses.403"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-OWN-22",
+      "endpoint": "GET /api/owners/{ownerId}",
+      "operationId": "getOwner",
+      "category": "sécurité",
+      "description": "Un client (OWNER) qui demande un propriétaire inexistant reçoit 403 et non 404, pour ne pas révéler quels identifiants existent.",
+      "preconditions": [
+        "Authentifié en tant que 'george' (ROLE_OWNER)",
+        "Lecture du propriétaire 999"
+      ],
+      "expected_status": 403,
+      "source": {
+        "type": "code",
+        "reference": "AccessChecker.isOwner"
+      },
+      "priority": "moyenne"
+    },
+    {
+      "id": "REQ-OWN-23",
+      "endpoint": "PUT /api/owners/{ownerId}",
+      "operationId": "updateOwner",
+      "category": "fonctionnel",
+      "description": "La modification d'un propriétaire existant avec des champs valides réussit et renvoie le propriétaire modifié.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)",
+        "Le propriétaire 1 existe"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./owners/{ownerId}.put.responses.200"
+      },
+      "priority": "haute",
+      "ecart_connu": "Le code renvoie 204 sans corps (OwnerRestControllerV1.updateOwner)"
+    },
+    {
+      "id": "REQ-OWN-24",
+      "endpoint": "PUT /api/owners/{ownerId}",
+      "operationId": "updateOwner",
+      "category": "erreur",
+      "description": "La modification d'un propriétaire inexistant renvoie une erreur 'non trouvé'.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 404,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./owners/{ownerId}.put.responses.404"
+      },
+      "priority": "moyenne"
+    },
+    {
+      "id": "REQ-OWN-25",
+      "endpoint": "DELETE /api/owners/{ownerId}",
+      "operationId": "deleteOwner",
+      "category": "fonctionnel",
+      "description": "La suppression d'un propriétaire existant réussit ; il n'est ensuite plus trouvé.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)",
+        "Un propriétaire créé pour le test"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./owners/{ownerId}.delete.responses.200"
+      },
+      "priority": "moyenne",
+      "ecart_connu": "Le code renvoie 204 sans corps (OwnerRestControllerV1.deleteOwner)"
+    },
+    {
+      "id": "REQ-OWN-26",
+      "endpoint": "DELETE /api/owners/{ownerId}",
+      "operationId": "deleteOwner",
+      "category": "erreur",
+      "description": "La suppression d'un propriétaire inexistant renvoie une erreur 'non trouvé'.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 404,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./owners/{ownerId}.delete.responses.404"
+      },
+      "priority": "moyenne"
+    },
+    {
+      "id": "REQ-PAG-01",
+      "endpoint": "GET /api/v2/owners",
+      "operationId": "listOwnersPage",
+      "category": "pagination",
+      "description": "Sans paramètre, la première page (page 0) de 20 éléments au plus est renvoyée, avec 'page', 'size', 'totalElements' et 'totalPages'.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./v2/owners.get.parameters (default) + responses.200"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-PAG-02",
+      "endpoint": "GET /api/v2/owners",
+      "operationId": "listOwnersPage",
+      "category": "pagination",
+      "description": "Avec 'size=3', chaque page contient au plus 3 propriétaires et 'totalPages' vaut l'arrondi supérieur de totalElements / 3.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "components.schemas.OwnerPage.properties"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-PAG-03",
+      "endpoint": "GET /api/v2/owners",
+      "operationId": "listOwnersPage",
+      "category": "pagination",
+      "description": "Une page au-delà de la dernière renvoie une liste 'content' vide.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "components.schemas.OwnerPage.properties.content"
+      },
+      "priority": "moyenne"
+    },
+    {
+      "id": "REQ-PAG-04",
+      "endpoint": "GET /api/v2/owners",
+      "operationId": "listOwnersPage",
+      "category": "validation",
+      "description": "Une taille de page égale à 0 est refusée (minimum 1).",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 400,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./v2/owners.get.parameters.size.minimum"
+      },
+      "priority": "haute",
+      "ecart_connu": "À vérifier : sans validation effective, PageRequest.of lève une exception → 500 probable"
+    },
+    {
+      "id": "REQ-PAG-05",
+      "endpoint": "GET /api/v2/owners",
+      "operationId": "listOwnersPage",
+      "category": "validation",
+      "description": "Une taille de page supérieure à 100 est refusée.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 400,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./v2/owners.get.parameters.size.maximum"
+      },
+      "priority": "moyenne",
+      "ecart_connu": "À vérifier, comme REQ-PAG-04"
+    },
+    {
+      "id": "REQ-PAG-06",
+      "endpoint": "GET /api/v2/owners",
+      "operationId": "listOwnersPage",
+      "category": "validation",
+      "description": "Un numéro de page négatif est refusé.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 400,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./v2/owners.get.parameters.page.minimum"
+      },
+      "priority": "moyenne",
+      "ecart_connu": "À vérifier, comme REQ-PAG-04"
+    },
+    {
+      "id": "REQ-PAG-07",
+      "endpoint": "GET /api/v2/pets",
+      "operationId": "listPetsPage",
+      "category": "pagination",
+      "description": "La liste paginée des animaux renvoie la page demandée avec les mêmes métadonnées que les propriétaires.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./v2/pets.get.responses.200"
+      },
+      "priority": "moyenne"
+    },
+    {
+      "id": "REQ-PET-01",
+      "endpoint": "POST /api/owners/{ownerId}/pets",
+      "operationId": "addPetToOwner",
+      "category": "fonctionnel",
+      "description": "L'ajout d'un animal valide à un propriétaire existant réussit et renvoie l'animal créé.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)",
+        "Le propriétaire 1 existe"
+      ],
+      "expected_status": 201,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./owners/{ownerId}/pets.post.responses.201"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-PET-02",
+      "endpoint": "POST /api/owners/{ownerId}/pets",
+      "operationId": "addPetToOwner",
+      "category": "erreur",
+      "description": "L'ajout d'un animal à un propriétaire inexistant renvoie une erreur 'non trouvé'.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 404,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./owners/{ownerId}/pets.post.responses.404"
+      },
+      "priority": "moyenne"
+    },
+    {
+      "id": "REQ-PET-03",
+      "endpoint": "POST /api/owners/{ownerId}/pets",
+      "operationId": "addPetToOwner",
+      "category": "validation",
+      "description": "Un animal sans nom est refusé.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 400,
+      "source": {
+        "type": "openapi",
+        "reference": "components.schemas.PetFields.required (name)"
+      },
+      "priority": "moyenne"
+    },
+    {
+      "id": "REQ-PET-04",
+      "endpoint": "POST /api/owners/{ownerId}/pets",
+      "operationId": "addPetToOwner",
+      "category": "validation",
+      "description": "Une date de naissance dans le futur (ex. demain) est refusée.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 400,
+      "source": {
+        "type": "openapi",
+        "reference": "components.schemas.PetFields.properties.birthDate.x-field-extra-annotation (PetAgeValidation)"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-PET-05",
+      "endpoint": "POST /api/owners/{ownerId}/pets",
+      "operationId": "addPetToOwner",
+      "category": "validation",
+      "description": "Une date de naissance égale à aujourd'hui est acceptée (valeur limite).",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 201,
+      "source": {
+        "type": "code",
+        "reference": "PetAgeValidator.isValid"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-PET-06",
+      "endpoint": "POST /api/owners/{ownerId}/pets",
+      "operationId": "addPetToOwner",
+      "category": "validation",
+      "description": "Une date de naissance de plus de 50 ans (ex. il y a 50 ans et 1 jour) est refusée.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 400,
+      "source": {
+        "type": "code",
+        "reference": "PetAgeValidator.isValid"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-PET-07",
+      "endpoint": "POST /api/owners/{ownerId}/pets",
+      "operationId": "addPetToOwner",
+      "category": "validation",
+      "description": "Une date de naissance d'exactement 50 ans est acceptée (valeur limite).",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 201,
+      "source": {
+        "type": "code",
+        "reference": "PetAgeValidator.isValid"
+      },
+      "priority": "moyenne"
+    },
+    {
+      "id": "REQ-PET-08",
+      "endpoint": "GET /api/pets/{petId}",
+      "operationId": "getPet",
+      "category": "fonctionnel",
+      "description": "Un animal existant est renvoyé.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)",
+        "L'animal 1 existe"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./pets/{petId}.get.responses.200"
+      },
+      "priority": "moyenne"
+    },
+    {
+      "id": "REQ-PET-09",
+      "endpoint": "GET /api/pets/{petId}",
+      "operationId": "getPet",
+      "category": "erreur",
+      "description": "La lecture d'un animal inexistant renvoie une erreur 'non trouvé'.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 404,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./pets/{petId}.get.responses.404"
+      },
+      "priority": "moyenne"
+    },
+    {
+      "id": "REQ-PET-10",
+      "endpoint": "GET /api/pets/{petId}",
+      "operationId": "getPet",
+      "category": "sécurité",
+      "description": "Un client (OWNER) ne peut pas lire l'animal d'un autre propriétaire.",
+      "preconditions": [
+        "Authentifié en tant que 'george' (ROLE_OWNER), lié au propriétaire 1",
+        "Lecture de l'animal 2 (propriétaire 2)"
+      ],
+      "expected_status": 403,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./pets/{petId}.get.description (Allowed roles) + responses.403"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-PET-11",
+      "endpoint": "GET /api/owners/{ownerId}/pets/{petId}",
+      "operationId": "getOwnersPet",
+      "category": "sécurité",
+      "description": "Un client (OWNER) peut lire son propre animal via son propriétaire.",
+      "preconditions": [
+        "Authentifié en tant que 'george' (ROLE_OWNER), lié au propriétaire 1",
+        "Lecture de /owners/1/pets/1"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./owners/{ownerId}/pets/{petId}.get.description (Allowed roles)"
+      },
+      "priority": "moyenne"
+    },
+    {
+      "id": "REQ-PET-12",
+      "endpoint": "PUT /api/pets/{petId}",
+      "operationId": "updatePet",
+      "category": "fonctionnel",
+      "description": "La modification d'un animal existant réussit et renvoie l'animal modifié.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./pets/{petId}.put.responses.200"
+      },
+      "priority": "moyenne",
+      "ecart_connu": "Le code renvoie 204 sans corps ; le schéma de requête 'Pet' rend 'id' et 'visits' obligatoires"
+    },
+    {
+      "id": "REQ-PET-13",
+      "endpoint": "DELETE /api/pets/{petId}",
+      "operationId": "deletePet",
+      "category": "sécurité",
+      "description": "Un vétérinaire n'a pas le droit de supprimer un animal.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 403,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./pets/{petId}.delete.description (Allowed roles) + responses.403"
+      },
+      "priority": "moyenne"
+    },
+    {
+      "id": "REQ-VIS-01",
+      "endpoint": "POST /api/owners/{ownerId}/pets/{petId}/visits",
+      "operationId": "addVisitToOwner",
+      "category": "fonctionnel",
+      "description": "L'ajout d'une visite valide (date + description) à un animal réussit et renvoie la visite créée.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)",
+        "L'animal 1 du propriétaire 1 existe"
+      ],
+      "expected_status": 201,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./owners/{ownerId}/pets/{petId}/visits.post.responses.201"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-VIS-02",
+      "endpoint": "POST /api/owners/{ownerId}/pets/{petId}/visits",
+      "operationId": "addVisitToOwner",
+      "category": "validation",
+      "description": "Une visite sans description est refusée.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 400,
+      "source": {
+        "type": "openapi",
+        "reference": "components.schemas.VisitFields.required (description)"
+      },
+      "priority": "moyenne"
+    },
+    {
+      "id": "REQ-VIS-03",
+      "endpoint": "POST /api/owners/{ownerId}/pets/{petId}/visits",
+      "operationId": "addVisitToOwner",
+      "category": "erreur",
+      "description": "L'ajout d'une visite à un animal qui n'appartient pas au propriétaire indiqué dans l'URL est refusé.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)",
+        "POST /owners/1/pets/2/visits (l'animal 2 appartient au propriétaire 2)"
+      ],
+      "expected_status": 404,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./owners/{ownerId}/pets/{petId}/visits.post.responses.404 (Pet not found for this owner)"
+      },
+      "priority": "haute",
+      "ecart_connu": "Le code ignore 'ownerId' : la visite est ajoutée à l'animal 2 (201) — bug connu"
+    },
+    {
+      "id": "REQ-VIS-04",
+      "endpoint": "POST /api/visits",
+      "operationId": "addVisit",
+      "category": "fonctionnel",
+      "description": "La création d'une visite via /visits réussit et renvoie la visite créée.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./visits.post.responses.200"
+      },
+      "priority": "moyenne",
+      "ecart_connu": "Le code renvoie 201 ; le schéma 'Visit' rend 'id' obligatoire alors qu'il est en lecture seule"
+    },
+    {
+      "id": "REQ-VIS-05",
+      "endpoint": "GET /api/visits/{visitId}",
+      "operationId": "getVisit",
+      "category": "erreur",
+      "description": "La lecture d'une visite inexistante renvoie une erreur 'non trouvé'.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 404,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./visits/{visitId}.get.responses.404"
+      },
+      "priority": "moyenne"
+    },
+    {
+      "id": "REQ-VIS-06",
+      "endpoint": "GET /api/visits/{visitId}",
+      "operationId": "getVisit",
+      "category": "sécurité",
+      "description": "Un client (OWNER) ne peut pas lire la visite d'un animal qui ne lui appartient pas.",
+      "preconditions": [
+        "Authentifié en tant que 'george' (ROLE_OWNER), lié au propriétaire 1",
+        "Lecture de la visite 1 (animal 7, propriétaire 6)"
+      ],
+      "expected_status": 403,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./visits/{visitId}.get.description (Allowed roles) + responses.403"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-VIS-07",
+      "endpoint": "PUT /api/visits/{visitId}",
+      "operationId": "updateVisit",
+      "category": "fonctionnel",
+      "description": "La modification d'une visite existante réussit et renvoie la visite modifiée.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)",
+        "La visite 1 existe"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./visits/{visitId}.put.responses.200"
+      },
+      "priority": "basse",
+      "ecart_connu": "Le code renvoie 204 sans corps"
+    },
+    {
+      "id": "REQ-VIS-08",
+      "endpoint": "DELETE /api/visits/{visitId}",
+      "operationId": "deleteVisit",
+      "category": "sécurité",
+      "description": "Un vétérinaire n'a pas le droit de supprimer une visite.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 403,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./visits/{visitId}.delete.description (Allowed roles) + responses.403"
+      },
+      "priority": "moyenne"
+    },
+    {
+      "id": "REQ-VIS-09",
+      "endpoint": "DELETE /api/visits/{visitId}",
+      "operationId": "deleteVisit",
+      "category": "fonctionnel",
+      "description": "Une réceptionniste peut supprimer une visite existante.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)",
+        "Une visite créée pour le test"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./visits/{visitId}.delete.responses.200"
+      },
+      "priority": "basse",
+      "ecart_connu": "Le code renvoie 204 sans corps"
+    },
+    {
+      "id": "REQ-VET-01",
+      "endpoint": "GET /api/vets",
+      "operationId": "listVets",
+      "category": "fonctionnel",
+      "description": "La liste des vétérinaires est renvoyée avec leurs spécialités.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./vets.get.responses.200"
+      },
+      "priority": "basse"
+    },
+    {
+      "id": "REQ-VET-02",
+      "endpoint": "GET /api/vets/{vetId}",
+      "operationId": "getVet",
+      "category": "erreur",
+      "description": "La lecture d'un vétérinaire inexistant renvoie une erreur 'non trouvé'.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 404,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./vets/{vetId}.get.responses.404"
+      },
+      "priority": "basse"
+    },
+    {
+      "id": "REQ-VET-03",
+      "endpoint": "POST /api/vets",
+      "operationId": "addVet",
+      "category": "fonctionnel",
+      "description": "Un administrateur peut créer un vétérinaire valide.",
+      "preconditions": [
+        "Authentifié en tant que 'admin' (ROLE_ADMIN)"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./vets.post.responses.200"
+      },
+      "priority": "basse",
+      "ecart_connu": "Le code renvoie 201 ; le schéma 'Vet' rend 'id' obligatoire alors qu'il est en lecture seule"
+    },
+    {
+      "id": "REQ-VET-04",
+      "endpoint": "POST /api/vets",
+      "operationId": "addVet",
+      "category": "sécurité",
+      "description": "Une réceptionniste n'a pas le droit de créer un vétérinaire.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 403,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./vets.post.description (Allowed roles) + responses.403"
+      },
+      "priority": "moyenne"
+    },
+    {
+      "id": "REQ-SPE-01",
+      "endpoint": "POST /api/specialties",
+      "operationId": "addSpecialty",
+      "category": "fonctionnel",
+      "description": "Un administrateur peut créer une spécialité.",
+      "preconditions": [
+        "Authentifié en tant que 'admin' (ROLE_ADMIN)"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./specialties.post.responses.200"
+      },
+      "priority": "basse",
+      "ecart_connu": "Le code renvoie 201 ; le schéma 'Specialty' rend 'id' obligatoire alors qu'il est en lecture seule"
+    },
+    {
+      "id": "REQ-SPE-02",
+      "endpoint": "POST /api/specialties",
+      "operationId": "addSpecialty",
+      "category": "validation",
+      "description": "Une spécialité sans nom est refusée.",
+      "preconditions": [
+        "Authentifié en tant que 'admin' (ROLE_ADMIN)"
+      ],
+      "expected_status": 400,
+      "source": {
+        "type": "openapi",
+        "reference": "components.schemas.Specialty.required (name)"
+      },
+      "priority": "basse"
+    },
+    {
+      "id": "REQ-SPE-03",
+      "endpoint": "GET /api/specialties/{specialtyId}",
+      "operationId": "getSpecialty",
+      "category": "erreur",
+      "description": "La lecture d'une spécialité inexistante renvoie une erreur 'non trouvé'.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 404,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./specialties/{specialtyId}.get.responses.404"
+      },
+      "priority": "basse"
+    },
+    {
+      "id": "REQ-TYP-01",
+      "endpoint": "GET /api/pettypes",
+      "operationId": "listPetTypes",
+      "category": "fonctionnel",
+      "description": "La liste des types d'animaux est renvoyée.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./pettypes.get.responses.200"
+      },
+      "priority": "basse"
+    },
+    {
+      "id": "REQ-TYP-02",
+      "endpoint": "POST /api/pettypes",
+      "operationId": "addPetType",
+      "category": "fonctionnel",
+      "description": "Un administrateur peut créer un type d'animal.",
+      "preconditions": [
+        "Authentifié en tant que 'admin' (ROLE_ADMIN)"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./pettypes.post.responses.200"
+      },
+      "priority": "basse",
+      "ecart_connu": "Le code renvoie 201"
+    },
+    {
+      "id": "REQ-TYP-03",
+      "endpoint": "POST /api/pettypes",
+      "operationId": "addPetType",
+      "category": "sécurité",
+      "description": "Un vétérinaire n'a pas le droit de créer un type d'animal.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 403,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./pettypes.post.description (Allowed roles) + responses.403"
+      },
+      "priority": "basse"
+    },
+    {
+      "id": "REQ-TYP-04",
+      "endpoint": "DELETE /api/pettypes/{petTypeId}",
+      "operationId": "deletePetType",
+      "category": "erreur",
+      "description": "La suppression d'un type d'animal inexistant renvoie une erreur 'non trouvé'.",
+      "preconditions": [
+        "Authentifié en tant que 'admin' (ROLE_ADMIN)"
+      ],
+      "expected_status": 404,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./pettypes/{petTypeId}.delete.responses.404"
+      },
+      "priority": "basse"
+    },
+    {
+      "id": "REQ-USR-01",
+      "endpoint": "POST /api/users",
+      "operationId": "addUser",
+      "category": "fonctionnel",
+      "description": "Un administrateur peut créer un utilisateur avec un rôle.",
+      "preconditions": [
+        "Authentifié en tant que 'admin' (ROLE_ADMIN)"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./users.post.responses.200"
+      },
+      "priority": "moyenne",
+      "ecart_connu": "Le code renvoie 201 ; la réponse contient le mot de passe (haché)"
+    },
+    {
+      "id": "REQ-USR-02",
+      "endpoint": "POST /api/users",
+      "operationId": "addUser",
+      "category": "fonctionnel",
+      "description": "Un utilisateur créé via l'API peut ensuite se connecter avec son mot de passe.",
+      "preconditions": [
+        "Authentifié en tant que 'admin' (ROLE_ADMIN)",
+        "Utilisateur créé par REQ-USR-01"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "code",
+        "reference": "UserServiceImpl.saveUser (hachage BCrypt) + paths./auth/login"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-USR-03",
+      "endpoint": "POST /api/users",
+      "operationId": "addUser",
+      "category": "validation",
+      "description": "Un utilisateur sans rôle est refusé.",
+      "preconditions": [
+        "Authentifié en tant que 'admin' (ROLE_ADMIN)"
+      ],
+      "expected_status": 400,
+      "source": {
+        "type": "code",
+        "reference": "UserServiceImpl.saveUser ('at least a role')"
+      },
+      "priority": "moyenne",
+      "ecart_connu": "Le code lève IllegalArgumentException, convertie en 500 par le gestionnaire générique"
+    },
+    {
+      "id": "REQ-USR-04",
+      "endpoint": "POST /api/users",
+      "operationId": "addUser",
+      "category": "validation",
+      "description": "Un nom d'utilisateur de 80 caractères (maximum du contrat) est accepté.",
+      "preconditions": [
+        "Authentifié en tant que 'admin' (ROLE_ADMIN)"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "components.schemas.User.properties.username.maxLength"
+      },
+      "priority": "moyenne",
+      "ecart_connu": "La colonne users.username est VARCHAR(20) : échec en base au-delà de 20 caractères"
+    },
+    {
+      "id": "REQ-USR-05",
+      "endpoint": "POST /api/users",
+      "operationId": "addUser",
+      "category": "sécurité",
+      "description": "Une réceptionniste n'a pas le droit de créer un utilisateur.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)"
+      ],
+      "expected_status": 403,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./users.post.description (Allowed roles) + responses.403"
+      },
+      "priority": "haute"
+    },
+    {
+      "id": "REQ-OOPS-01",
+      "endpoint": "GET /api/oops",
+      "operationId": "failingRequest",
+      "category": "erreur",
+      "description": "L'opération /oops existe et renvoie une réponse d'erreur au format ProblemDetail.",
+      "preconditions": [
+        "Authentifié en tant que 'admin' (ROLE_ADMIN)"
+      ],
+      "expected_status": 400,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./oops.get.responses.400"
+      },
+      "priority": "basse",
+      "ecart_connu": "Aucun contrôleur n'implémente cette opération"
+    },
+    {
+      "id": "REQ-OWN-27",
+      "endpoint": "PUT /api/owners/{ownerId}/pets/{petId}",
+      "operationId": "updateOwnersPet",
+      "category": "fonctionnel",
+      "description": "La modification d'un animal d'un propriétaire réussit sans corps de réponse.",
+      "preconditions": [
+        "Authentifié en tant que 'reception' (ROLE_RECEPTIONIST)",
+        "L'animal 1 du propriétaire 1 existe"
+      ],
+      "expected_status": 204,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./owners/{ownerId}/pets/{petId}.put.responses.204"
+      },
+      "priority": "moyenne"
+    },
+    {
+      "id": "REQ-PET-14",
+      "endpoint": "GET /api/pets",
+      "operationId": "listPets",
+      "category": "fonctionnel",
+      "description": "La liste de tous les animaux est renvoyée.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./pets.get.responses.200"
+      },
+      "priority": "basse"
+    },
+    {
+      "id": "REQ-VIS-10",
+      "endpoint": "GET /api/visits",
+      "operationId": "listVisits",
+      "category": "fonctionnel",
+      "description": "La liste de toutes les visites est renvoyée.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./visits.get.responses.200"
+      },
+      "priority": "basse"
+    },
+    {
+      "id": "REQ-VET-05",
+      "endpoint": "PUT /api/vets/{vetId}",
+      "operationId": "updateVet",
+      "category": "fonctionnel",
+      "description": "Un administrateur peut modifier un vétérinaire existant.",
+      "preconditions": [
+        "Authentifié en tant que 'admin' (ROLE_ADMIN)",
+        "Le vétérinaire 1 existe"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./vets/{vetId}.put.responses.200"
+      },
+      "priority": "basse",
+      "ecart_connu": "Le code renvoie 204 sans corps ; le schéma 'Vet' rend 'id' obligatoire"
+    },
+    {
+      "id": "REQ-VET-06",
+      "endpoint": "DELETE /api/vets/{vetId}",
+      "operationId": "deleteVet",
+      "category": "erreur",
+      "description": "La suppression d'un vétérinaire inexistant renvoie une erreur 'non trouvé'.",
+      "preconditions": [
+        "Authentifié en tant que 'admin' (ROLE_ADMIN)"
+      ],
+      "expected_status": 404,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./vets/{vetId}.delete.responses.404"
+      },
+      "priority": "basse"
+    },
+    {
+      "id": "REQ-SPE-04",
+      "endpoint": "GET /api/specialties",
+      "operationId": "listSpecialties",
+      "category": "fonctionnel",
+      "description": "La liste des spécialités est renvoyée.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./specialties.get.responses.200"
+      },
+      "priority": "basse"
+    },
+    {
+      "id": "REQ-SPE-05",
+      "endpoint": "PUT /api/specialties/{specialtyId}",
+      "operationId": "updateSpecialty",
+      "category": "fonctionnel",
+      "description": "Un administrateur peut modifier une spécialité existante.",
+      "preconditions": [
+        "Authentifié en tant que 'admin' (ROLE_ADMIN)",
+        "La spécialité 1 existe"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./specialties/{specialtyId}.put.responses.200"
+      },
+      "priority": "basse",
+      "ecart_connu": "Le code renvoie 204 sans corps"
+    },
+    {
+      "id": "REQ-SPE-06",
+      "endpoint": "DELETE /api/specialties/{specialtyId}",
+      "operationId": "deleteSpecialty",
+      "category": "erreur",
+      "description": "La suppression d'une spécialité inexistante renvoie une erreur 'non trouvé'.",
+      "preconditions": [
+        "Authentifié en tant que 'admin' (ROLE_ADMIN)"
+      ],
+      "expected_status": 404,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./specialties/{specialtyId}.delete.responses.404"
+      },
+      "priority": "basse"
+    },
+    {
+      "id": "REQ-TYP-05",
+      "endpoint": "GET /api/pettypes/{petTypeId}",
+      "operationId": "getPetType",
+      "category": "fonctionnel",
+      "description": "Un type d'animal existant est renvoyé.",
+      "preconditions": [
+        "Authentifié en tant que 'vet' (ROLE_VET)",
+        "Le type 1 existe"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./pettypes/{petTypeId}.get.responses.200"
+      },
+      "priority": "basse"
+    },
+    {
+      "id": "REQ-TYP-06",
+      "endpoint": "PUT /api/pettypes/{petTypeId}",
+      "operationId": "updatePetType",
+      "category": "fonctionnel",
+      "description": "Un administrateur peut modifier un type d'animal existant.",
+      "preconditions": [
+        "Authentifié en tant que 'admin' (ROLE_ADMIN)",
+        "Le type 1 existe"
+      ],
+      "expected_status": 200,
+      "source": {
+        "type": "openapi",
+        "reference": "paths./pettypes/{petTypeId}.put.responses.200"
+      },
+      "priority": "basse",
+      "ecart_connu": "Le code renvoie 204 sans corps ; le schéma 'PetType' rend 'id' obligatoire"
+    }
+  ]
+}
