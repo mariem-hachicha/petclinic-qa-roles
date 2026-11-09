@@ -1,0 +1,23 @@
+# Clés API et secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Python
+__pycache__/
+.venv/
+venv/
+
+# Java / Maven
+target/
+*.class
+
+# IDE
+.idea/
+.vscode/
+
+# Fichiers système
+.DS_Store
+Thumbs.db
